@@ -73,6 +73,17 @@ app.register(fastifySwagger, {
   // transform: createJsonSchemaTransform({
   //   skipList: [ '/documentation/static/*' ]
   // })
+
+  // In order to create refs to the schemas, you need to provide the schemas to the transformObject using createJsonSchemaTransformObject
+  //
+  // transformObject: createJsonSchemaTransformObject({
+  //    schemas: {
+  //      User: z.object({
+  //        id: z.string(),
+  //        name: z.string(),
+  //      }),
+  //    }
+  // }),
 });
 
 app.register(fastifySwaggerUI, {
