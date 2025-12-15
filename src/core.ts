@@ -14,7 +14,8 @@ import type { $ZodRegistry, input, output } from 'zod/v4/core'
 import { $ZodType, globalRegistry, safeParse } from 'zod/v4/core'
 
 import { createValidationError, InvalidSchemaError, ResponseSerializationError } from './errors'
-import { zodRegistryToJson, zodSchemaToJson } from './zod-to-json'
+import { generateIORegistries } from './registry'
+import { getJSONSchemaTarget, zodRegistryToJson, zodSchemaToJson } from './zod-to-json'
 
 type FreeformRecord = Record<string, any>
 
@@ -46,13 +47,25 @@ export const createJsonSchemaTransform = ({
   skipList = defaultSkipList,
   schemaRegistry = globalRegistry,
 }: CreateJsonSchemaTransformOptions): SwaggerTransform<Schema> => {
-  return ({ schema, url }) => {
+  return ({ schema, url, ...document }) => {
     if (!schema) {
       return {
         schema,
         url,
       }
     }
+
+    if ('swaggerObject' in document) {
+      console.warn('This package currently does not support component references for Swagger 2.0')
+      return {
+        schema,
+        url,
+      }
+    }
+
+    const target = getJSONSchemaTarget(document.openapiObject.openapi)
+
+    const { inputRegistry, outputRegistry } = generateIORegistries(schemaRegistry)
 
     const { response, headers, querystring, body, params, hide, ...rest } = schema
 
@@ -68,7 +81,7 @@ export const createJsonSchemaTransform = ({
     for (const prop in zodSchemas) {
       const zodSchema = zodSchemas[prop]
       if (zodSchema) {
-        transformed[prop] = zodSchemaToJson(zodSchema, schemaRegistry, 'input')
+        transformed[prop] = zodSchemaToJson(zodSchema, inputRegistry, 'input', target)
       }
     }
 
@@ -78,7 +91,7 @@ export const createJsonSchemaTransform = ({
       for (const prop in response as any) {
         const zodSchema = resolveSchema((response as any)[prop])
 
-        transformed.response[prop] = zodSchemaToJson(zodSchema, schemaRegistry, 'output')
+        transformed.response[prop] = zodSchemaToJson(zodSchema, outputRegistry, 'output', target)
       }
     }
 
@@ -109,16 +122,11 @@ export const createJsonSchemaTransformObject =
       return input.swaggerObject
     }
 
-    const inputSchemas = zodRegistryToJson(schemaRegistry, 'input')
-    const outputSchemas = zodRegistryToJson(schemaRegistry, 'output')
+    const target = getJSONSchemaTarget(input.openapiObject.openapi)
 
-    for (const key in outputSchemas) {
-      if (inputSchemas[key]) {
-        throw new Error(
-          `Collision detected for schema "${key}". The is already an input schema with the same name.`,
-        )
-      }
-    }
+    const { inputRegistry, outputRegistry } = generateIORegistries(schemaRegistry)
+    const inputSchemas = zodRegistryToJson(inputRegistry, 'input', target)
+    const outputSchemas = zodRegistryToJson(outputRegistry, 'output', target)
 
     return {
       ...input.openapiObject,
